@@ -132,3 +132,8 @@ dmypy.json
 *.pt
 data/SRN
 sampling
+
+# Uranus
+.conda/
+results/
+sampling/
