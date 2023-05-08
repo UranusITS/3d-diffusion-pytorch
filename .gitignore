@@ -135,5 +135,8 @@ sampling
 
 # Uranus
 .conda/
+.vscode/
 results/
+!results/.gitkeep
 sampling/
+!sampling/.gitkeep

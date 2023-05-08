@@ -2,11 +2,12 @@ import os
 import nibabel as nib
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from normalization import CTNormalization
 
-class MultiEpochsDataLoader(torch.utils.data.DataLoader):
+
+class MultiEpochsDataLoader(DataLoader):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -36,56 +37,74 @@ class _RepeatSampler(object):
         while True:
             yield from iter(self.sampler)
 
+
 class IXIDataset(Dataset):
-    H = 150
-    W = 256
-    def __init__(self, data_dir='/data_hdd/users/lisikuang/IXI/T1/train/', depth=256):
+    def __init__(self,
+                 data_dir='/data_hdd/users/lisikuang/IXI/T1/train/',
+                 normalazation=CTNormalization(
+                     False,
+                     {
+                         'mean': 262.046,
+                         'std': 616.704,
+                         'percentile_00_5': 50,
+                         'percentile_99_5': 6000,
+                     }
+                 ),
+                 depth=256,
+                 input_width=128,
+                 output_width=256):
         self.data_dir = data_dir
         self.data_files = os.listdir(data_dir)
         self.depth = depth
-        self.normalization = CTNormalization(
-            False,
-            {
-                'mean': 262.046,
-                'std': 616.704,
-                'percentile_00_5': 50,
-                'percentile_99_5': 6000,
-            }
-        )
-        self.pad_width = [(0, 0), ((self.W - self.H) // 2, (self.W - self.H) // 2)] # padding (256, 150) -> (256, 256)
-        self.to_tensor = transforms.Compose([
+        self.input_width = input_width
+        self.output_width = output_width
+        self.normalization = normalazation
+        self.input_transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Resize((self.W // 2, self.W // 2), antialias=True)
+            transforms.Resize(
+                (self.input_width, self.input_width), antialias=True)
+        ])
+        self.output_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize(
+                (self.output_width, self.output_width), antialias=True)
         ])
 
     def __len__(self):
         return len(self.data_files) * (self.depth - 2)
 
-    def image_process(self, image: np.ndarray) -> torch.Tensor:
-        image = np.pad(image, self.pad_width)
-        # image = np.resize(image, (self.W // 2, self.W // 2))
+    def image_process(self, image: np.ndarray) -> np.ndarray:
+        H, W = image.shape
+        pad_width = [(0, 0), ((H - W) // 2, (H - W) - (H - W) // 2)
+                     ] if H > W else [((W - H) // 2, (W - H) - (W - H) // 2), (0, 0)]
+        image = np.pad(image, pad_width)
         image = self.normalization.run(image)
-        image = self.to_tensor(image)
         return image
 
     def __getitem__(self, idx):
         data_idx = idx // (self.depth - 2)
         depth_idx = idx % (self.depth - 2)
 
-        depths = torch.tensor((depth_idx, depth_idx + 1), dtype=torch.float32)
-
         data_path = os.path.join(self.data_dir, self.data_files[data_idx])
         data_obj = nib.load(data_path)
+
+        T = torch.tensor((data_obj.header.get_zooms()[
+                         1] * 2), dtype=torch.float32)
+
         data_array = data_obj.get_fdata()
         data_array = data_array.transpose(1, 0, 2)
 
         lower_image = self.image_process(data_array[depth_idx])
+        lower_image = self.input_transforms(lower_image)
         label_image = self.image_process(data_array[depth_idx + 1])
+        label_image = self.output_transforms(label_image)
         upper_image = self.image_process(data_array[depth_idx + 2])
+        upper_image = self.input_transforms(upper_image)
 
-        images = torch.stack((lower_image, upper_image, label_image), dim=0)
+        X = torch.stack((lower_image, upper_image), dim=0)
+        Y = label_image
 
-        return images, depths
+        return X, Y, T
 
 
 if __name__ == '__main__':
@@ -94,4 +113,4 @@ if __name__ == '__main__':
 
     for data in datas:
         print(data.shape)
-        print(data)
+        # print(data)

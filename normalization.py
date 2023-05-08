@@ -23,6 +23,9 @@ class ImageNormalization(ABC):
         """
         pass
 
+    def rerun(self, image: np.ndarray) -> np.ndarray:
+        return image
+
 
 class ZScoreNormalization(ImageNormalization):
     leaves_pixels_outside_mask_at_zero_if_use_mask_for_norm_is_true = True
@@ -52,7 +55,7 @@ class ZScoreNormalization(ImageNormalization):
 class CTNormalization(ImageNormalization):
     leaves_pixels_outside_mask_at_zero_if_use_mask_for_norm_is_true = False
 
-    def run(self, image: np.ndarray, seg: np.ndarray = None) -> np.ndarray:
+    def run(self, image: np.ndarray, seg: np.ndarray | None = None) -> np.ndarray:
         assert self.intensityproperties is not None, "CTNormalization requires intensity properties"
         image = image.astype(self.target_dtype)
         mean_intensity = self.intensityproperties['mean']
@@ -61,6 +64,13 @@ class CTNormalization(ImageNormalization):
         upper_bound = self.intensityproperties['percentile_99_5']
         image = np.clip(image, lower_bound, upper_bound)
         image = (image - mean_intensity) / max(std_intensity, 1e-8)
+        return image
+
+    def rerun(self, image: np.ndarray) -> np.ndarray:
+        assert self.intensityproperties is not None, "CTNormalization requires intensity properties"
+        mean_intensity = self.intensityproperties['mean']
+        std_intensity = self.intensityproperties['std']
+        image = image * max(std_intensity, 1e-8) + mean_intensity
         return image
 
 

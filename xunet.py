@@ -290,7 +290,7 @@ class ConditioningProcessor(torch.nn.Module):
             torch.nn.Linear(emb_ch, emb_ch)
         )
 
-        D = 82
+        D = 81
         if use_depth_emb:
             self.depth_emb = torch.nn.Parameter(
                 torch.zeros(D, H, W), requires_grad=True)
@@ -325,14 +325,11 @@ class ConditioningProcessor(torch.nn.Module):
         logsnr_emb = posenc_ddpm(logsnr, emb_ch=self.emb_ch, max_time=1.)
         logsnr_emb = self.logsnr_emb_emb(logsnr_emb)
 
-        depth = torch.clip(batch['depth'], -20, 20)
-        depth = depth.unsqueeze(2)
-        depth = depth.unsqueeze(3)
-        depth = pad(depth, (0, H - 1, 0, W - 1), 'replicate')
-        depth = depth.unsqueeze(1)
-        depth = rearrange(depth, 'b f c h w -> b f h w c')
+        depth = torch.clip(batch['t'], -20, 20)
+        depth = depth.repeat((1, 1, H, W, 1)) # leave last dim to batch
+        depth = rearrange(depth, 'f c h w b -> b f h w c')
         depth_emb = posenc_nerf(
-            depth.to(batch['x'].get_device()), min_deg=0, max_deg=20)
+            depth.to(batch['x'].get_device()), min_deg=0, max_deg=40)
 
         D = depth_emb.shape[-1]
         assert cond_mask.shape == (B,), (cond_mask.shape, B)
