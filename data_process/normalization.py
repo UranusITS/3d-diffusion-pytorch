@@ -81,6 +81,25 @@ class NoNormalization(ImageNormalization):
         return image.astype(self.target_dtype)
 
 
+class RescaleTo01WithMinMaxNormalization(ImageNormalization):
+    leaves_pixels_outside_mask_at_zero_if_use_mask_for_norm_is_true = False
+
+    def run(self, image: np.ndarray, seg: np.ndarray = None) -> np.ndarray:
+        assert self.intensityproperties is not None, "RescaleTo01WithMinMaxNormalization requires intensity properties"
+        image = image.astype(self.target_dtype)
+        min_intensity = self.intensityproperties['min']
+        max_intensity = self.intensityproperties['max']
+        image = (image - min_intensity) / (max_intensity - min_intensity)
+        return image
+
+    def rerun(self, image: np.ndarray) -> np.ndarray:
+        assert self.intensityproperties is not None, "RescaleTo01WithMinMaxNormalization requires intensity properties"
+        min_intensity = self.intensityproperties['min']
+        max_intensity = self.intensityproperties['max']
+        image = image * (max_intensity - min_intensity) + min_intensity
+        return image
+
+
 class RescaleTo01Normalization(ImageNormalization):
     leaves_pixels_outside_mask_at_zero_if_use_mask_for_norm_is_true = False
 

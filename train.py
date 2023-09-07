@@ -13,35 +13,53 @@ from einops import rearrange
 import time
 from math import isinf
 
-from IXIdataset import IXIDataset, MultiEpochsDataLoader
-from normalization import CTNormalization
+from data_process.AMOSdataset import AMOSDataset
+from data_process.IXIdataset import IXIDataset
+from data_process.sampler import MultiEpochsDataLoader
+from data_process.normalization import CTNormalization, RescaleTo01WithMinMaxNormalization
 from tensorboardX import SummaryWriter
 import os
 
-image_size = 128
+input_width = 128
+output_width = 256
 batch_size = 4
 test_batch_size = 32
 lr = 1e-6
+dataset_name = 'AMOS'
 
-normalization = CTNormalization(
-    False,
-    {
-        'mean': 262.046,
-        'std': 616.704,
-        'percentile_00_5': 50,
-        'percentile_99_5': 6000,
-    }
-)
-
-d = IXIDataset('/data_hdd/users/lisikuang/IXI/T1/train/', normalization, input_width=image_size, output_width=image_size)
-d_val = IXIDataset('/data_hdd/users/lisikuang/IXI/T1/valid/', normalization, input_width=image_size, output_width=image_size)
+if dataset_name == 'IXI':
+    normalization = CTNormalization(
+        False,
+        {
+            'mean': 262.046,
+            'std': 616.704,
+            'percentile_00_5': 50,
+            'percentile_99_5': 6000,
+        }
+    )
+    d = IXIDataset('/data_hdd/users/lisikuang/IXI/T1/train/', normalization, input_width=input_width, output_width=output_width)
+    d_val = IXIDataset('/data_hdd/users/lisikuang/IXI/T1/valid/', normalization, input_width=input_width, output_width=output_width)
+elif dataset_name == 'AMOS':
+    normalization = CTNormalization(
+        False,
+        {
+            'mean': -277.6655390597008,
+            'std': 7598.694741902908,
+            'percentile_00_5': -3024,
+            'percentile_99_5': 23872,
+        }
+    )
+    d = AMOSDataset('training', normalization=normalization, input_width=input_width, output_width=output_width)
+    d_val = AMOSDataset('validation', normalization=normalization, input_width=input_width, output_width=output_width)
+else:
+    raise NotImplementedError
 
 loader = MultiEpochsDataLoader(d, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=40)
 loader_val = DataLoader(d_val, batch_size=test_batch_size, shuffle=True, drop_last=True, num_workers=16)
 
 device = 'cuda:0'
 
-model = XUNet(H=image_size, W=image_size, input_ch=1, output_ch=1)
+model = XUNet(H=output_width, W=output_width, input_ch=1, output_ch=1)
 model = torch.nn.DataParallel(model)
 model.to(device)
 
@@ -62,7 +80,7 @@ args = parser.parse_args()
 
 
 if args.transfer == "":
-    tag = './results/IXI/int-hint-02'
+    tag = f'./results/{dataset_name}/int-hint-test'
     writer = SummaryWriter(tag)
     step = 0
 else:
@@ -119,8 +137,8 @@ for e in range(100000):
                     img = normalization.rerun(img[-1])
                     gt = normalization.rerun(Y)
                     cd = normalization.rerun(get_hint(X, (3, Y.shape[2], Y.shape[3])))
-                    mn = min(img.min(), gt.min(), cd.min())
-                    mx = max(img.max(), gt.max(), cd.max())
+                    mn = float(min(img.min(), gt.min(), cd.min()))
+                    mx = float(max(img.max(), gt.max(), cd.max()))
                     img = norm2255(img, mn, mx)
                     gt = norm2255(gt, mn, mx)
                     cd = norm2255(cd, mn, mx)
@@ -151,6 +169,5 @@ for e in range(100000):
         step += 1
         starttime = time.time()
 
-    if e % 20 == 0:
-        torch.save({'optim': optimizer.state_dict(), 'model': model.state_dict(
-        ), 'step': step, 'epoch': e}, tag+f"/latest.pt")
+    torch.save({'optim': optimizer.state_dict(), 'model': model.state_dict(
+    ), 'step': step, 'epoch': e}, tag+f"/latest.pt")

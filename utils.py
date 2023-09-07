@@ -10,28 +10,33 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 
-def norm201(img, mn, mx):
-    return (img - mn) / max((mx - mn), 1)
+def norm201(img, mn: float, mx: float):
+    return (img - mn) / (mx - mn) if mx > mn else np.zeros_like(img)
 
 
-def norm2255(img, mn, mx):
-    if torch.is_tensor(img):
-        if img.get_device() < 0:
-            return (norm201(img, mn, mx) * 255).numpy().astype(np.uint8)
+def norm2255(img, mn: float, mx: float):
+    new_img = norm201(img, mn, mx) * 255
+    if torch.is_tensor(new_img):
+        if new_img.get_device() < 0:
+            return new_img.numpy().astype(np.uint8)
         else:
-            return (norm201(img, mn, mx) * 255).detach().cpu().numpy().astype(np.uint8)
+            return new_img.detach().cpu().numpy().astype(np.uint8)
     else:
-        return (norm201(img, mn, mx) * 255).numpy().astype(np.uint8)
+        return new_img.astype(np.uint8)
 
 
 def compare_ssim(gt, img, win_size, channel_axis=None):
-    return structural_similarity(gt, img, win_size=win_size, channel_axis=channel_axis)
+    mx = max(gt.max(), img.max())
+    mn = min(gt.min(), img.min())
+    data_range = mx - mn
+    return structural_similarity(gt, img, win_size=win_size, data_range=data_range, channel_axis=channel_axis)
 
 
 def compare_psnr(gt, img):
-    mx = max(np.max(gt), np.max(img))
-    mn = min(np.min(gt), np.min(img))
-    return peak_signal_noise_ratio(norm201(gt, mn, mx), norm201(img, mn, mx))
+    mx = max(gt.max(), img.max())
+    mn = min(gt.min(), img.min())
+    data_range = mx - mn
+    return peak_signal_noise_ratio(gt, img, data_range=data_range)
 
 
 def get_hint(img, size):

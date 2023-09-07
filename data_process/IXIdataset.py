@@ -2,46 +2,15 @@ import os
 import nibabel as nib
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torchvision import transforms
-from normalization import CTNormalization
-
-
-class MultiEpochsDataLoader(DataLoader):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._DataLoader__initialized = False
-        self.batch_sampler = _RepeatSampler(self.batch_sampler)
-        self._DataLoader__initialized = True
-        self.iterator = super().__iter__()
-
-    def __len__(self):
-        return len(self.batch_sampler.sampler)
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield next(self.iterator)
-
-
-class _RepeatSampler(object):
-    """ Sampler that repeats forever.
-    Args:
-        sampler (Sampler)
-    """
-
-    def __init__(self, sampler):
-        self.sampler = sampler
-
-    def __iter__(self):
-        while True:
-            yield from iter(self.sampler)
+from .normalization import ImageNormalization, CTNormalization
 
 
 class IXIDataset(Dataset):
     def __init__(self,
                  data_dir='/data_hdd/users/lisikuang/IXI/T1/train/',
-                 normalazation=CTNormalization(
+                 normalization: ImageNormalization = CTNormalization(
                      False,
                      {
                          'mean': 262.046,
@@ -58,7 +27,7 @@ class IXIDataset(Dataset):
         self.depth = depth
         self.input_width = input_width
         self.output_width = output_width
-        self.normalization = normalazation
+        self.normalization = normalization
         self.input_transforms = transforms.Compose([
             transforms.ToTensor(),
             transforms.Resize(

@@ -15,8 +15,8 @@ from einops import rearrange
 import time
 from PIL import Image
 
-from normalization import CTNormalization
-from IXIdataset import IXIDataset, MultiEpochsDataLoader
+from data_process.normalization import CTNormalization
+from data_process.IXIdataset import IXIDataset, MultiEpochsDataLoader
 from utils import *
 from tensorboardX import SummaryWriter
 import os
